@@ -11,6 +11,60 @@ Step1: Make a working .pte deploy and run in phone....
 =====
 
 
+MyApplication/
+│
+├── app/
+│   ├── build.gradle            # Module-level Gradle config
+│   ├── proguard-rules.pro      # ProGuard rules (for release)
+│   │
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── AndroidManifest.xml
+│   │   │   │
+│   │   │   ├── java/ (or kotlin/)
+│   │   │   │   └── com/example/myapplication/
+│   │   │   │       ├── MainActivity.kt
+│   │   │   │       ├── App.kt (optional)
+│   │   │   │       ├── ui/
+│   │   │   │       │   ├── theme/
+│   │   │   │       │   ├── components/
+│   │   │   │       │   └── screens/
+│   │   │   │       ├── data/
+│   │   │   │       │   ├── model/
+│   │   │   │       │   ├── repository/
+│   │   │   │       │   └── local/
+│   │   │   │       ├── domain/
+│   │   │   │       │   ├── usecase/
+│   │   │   │       │   └── entity/
+│   │   │   │       └── utils/
+│   │   │   │
+│   │   │   ├── res/
+│   │   │   │   ├── layout/
+│   │   │   │   │   └── activity_main.xml
+│   │   │   │   ├── drawable/
+│   │   │   │   ├── mipmap/
+│   │   │   │   ├── values/
+│   │   │   │   │   ├── colors.xml
+│   │   │   │   │   ├── strings.xml
+│   │   │   │   │   └── themes.xml
+│   │   │   │   ├── navigation/
+│   │   │   │   └── xml/
+│   │   │   │
+│   │   │   ├── assets/         # (Optional: models, files)
+│   │   │   └── jniLibs/        # Native libs (.so files)
+│   │   │
+│   │   ├── test/               # Unit tests
+│   │   └── androidTest/        # Instrumented tests
+│   │
+│   └── libs/                  # External .jar/.aar
+│
+├── build.gradle               # Project-level Gradle config
+├── settings.gradle
+├── gradle.properties
+├── gradlew
+├── gradlew.bat
+└── .gitignore
+
 
 ====
 1. Save oython file that generates .pte file
