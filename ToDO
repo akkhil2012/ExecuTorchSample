@@ -17,6 +17,8 @@ Progress:
 1. use FP32 bit model
 2. quantized while exporting
 
+Llama-v3.1-8B-Instruct vs Qwen2.5 5B
+
 questions:
 =====
  Executorch doesn't support quantized model
