@@ -11,6 +11,12 @@ Step1: Make a working .pte deploy and run in phone....
 =====
 
 
+Progress:
+--
+
+1. use FP32 bit model
+2. quantized while exporting
+
 questions:
 =====
  Executorch doesn't support quantized model
