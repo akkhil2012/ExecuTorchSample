@@ -1,2 +1,5 @@
 pip install torch transformers
 pip install executorch
+
+
+Step1: Make a working .pte deploy and run in phone....
