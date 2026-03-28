@@ -16,6 +16,7 @@ Progress:
 
 1. use FP32 bit model
 2. quantized while exporting
+Qwen2.5-1.5B-Instruct
 
 Llama-v3.1-8B-Instruct vs Qwen2.5 5B
 
