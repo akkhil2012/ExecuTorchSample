@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""
+Example script demonstrating Qwen 2 0.5B export for Android deployment.
+Compatible with PyTorch 2.1.x
+"""
+
+from pipeline import (
+    ExportConfig,
+    ModelType,
+    Backend,
+    QuantizationMode,
+    test_qwen_text_processing,
+    run_pipeline
+)
+
+def main():
+    print("🚀 Qwen 2 0.5B Export Example for Android")
+    print("=" * 50)
+    
+    # -----------------------------
+    # 1. Test text processing
+    # -----------------------------
+    print("\n1. Testing text processing...")
+    test_qwen_text_processing()
+    
+    # -----------------------------
+    # 2. Export Configuration
+    # -----------------------------
+    print("\n2. Exporting Qwen model for Android...")
+    
+    config = ExportConfig(
+        model_type=ModelType.QWEN_2_0_5B,
+        backend=Backend.XNNPACK,  # Best for Android CPU
+        
+        # ✅ FIX: Disable quantization (PyTorch 2.1 compatibility)
+        quantization=QuantizationMode.NONE,
+        
+        input_shape=(1, 128),  # ✅ Smaller = safer for export
+        output_name="qwen2_0_5b_android",
+        output_dir="./android_models",
+        
+        # ⚠️ Dynamic shapes can break export → disable for now
+        dynamic_shapes=False,
+        dynamic_min=128,
+        dynamic_max=512,
+        
+        validate=True,
+        profile=True,
+    )
+    
+    print(f"Configuration:")
+    print(f"  Model: {config.model_type.value}")
+    print(f"  Backend: {config.backend}")
+    print(f"  Quantization: {config.quantization}")
+    print(f"  Input shape: {config.input_shape}")
+    print(f"  Dynamic shapes: {config.dynamic_shapes}")
+    
+    # -----------------------------
+    # 3. Run Export Pipeline
+    # -----------------------------
+    try:
+        pte_path = run_pipeline(config)
+        
+        print(f"\n✅ Export completed successfully!")
+        print(f"📱 Android-ready model saved to: {pte_path}")
+        
+        print(f"\n📋 Next steps for Android integration:")
+        print(f"   1. Copy the .pte file to your Android app's assets folder")
+        print(f"   2. Load using ExecuTorch Module.load()")
+        print(f"   3. Implement tokenizer + decoding loop")
+        
+    except Exception as e:
+        print(f"\n❌ Export failed: {e}")
+        
+        print("\n💡 Fix suggestions:")
+        print("   - Ensure torch==2.1.x or 2.2.x")
+        print("   - Disable quantization (already done)")
+        print("   - Reduce input_shape further (e.g., 1x64)")
+        print("   - Check ExecuTorch compatibility")
+        
+        print("\n📦 Install dependencies:")
+        print("   pip install executorch torch transformers")
+
+if __name__ == "__main__":
+    main()
