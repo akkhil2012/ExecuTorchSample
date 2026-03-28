@@ -12,6 +12,11 @@ Step1: Make a working .pte deploy and run in phone....
 
 
 
+====
+1. Save oython file that generates .pte file
+2. Android studio to build app// push it to a repo
+
+
 11:24:54 │ INFO     │   Edge lowering completed in 55.25s
 11:24:54 │ INFO     │   Graph nodes: 1946 (delegated subgraphs detected: 488)
   Stage 5/7: Serialization...
