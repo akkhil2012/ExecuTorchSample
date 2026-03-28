@@ -11,6 +11,11 @@ Step1: Make a working .pte deploy and run in phone....
 =====
 
 
+questions:
+=====
+ Executorch doesn't support quantized model
+
+
 MyApplication/
 │
 ├── app/
