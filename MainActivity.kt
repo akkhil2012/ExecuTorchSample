@@ -23,7 +23,12 @@ class MainActivity : AppCompatActivity() {
 
         resultText = findViewById(R.id.resultText)
 
-        module = Module.load(assetFilePath("smollm_135m_fixed.pte"))
+        try {
+            module = Module.load(assetFilePath("smollm_135m_fixed.pte"))
+        } catch (e: Exception) {
+            e.printStackTrace()
+            resultText.text = "Error loading model: ${e.message}"
+        }
 
         val button = findViewById<Button>(R.id.runButton)
         button.setOnClickListener {
@@ -33,8 +38,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun runInference() {
         // SmolLM expects Long (int64) tokens.
-        // Using a sample sequence length of 64 for demonstration.
-        val sequenceLength = 64L
+        // Logcat showed: Attempted to resize a static tensor. Expected shape (1, 32), but received (1, 64).
+        // So we use sequenceLength = 32.
+        val sequenceLength = 32L
         val inputData = LongArray(sequenceLength.toInt()) { 0L }
         val maskData = LongArray(sequenceLength.toInt()) { 1L }
 
