@@ -1,4 +1,9 @@
 """
+
+
+HF_HUB_DISABLE_XET=1 python createtest2.py --model phi3
+
+
 export_phi3.py
 ──────────────────────────────────────────────────────────────────────────────
 Exports Phi-3 Mini (or TinyLlama as fallback) to a quantized ExecuTorch
