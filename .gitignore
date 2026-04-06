@@ -1,0 +1,186 @@
+# =============================================================================
+# .gitignore — Android + ExecuTorch + Large Model (Phi-3 / LLM)
+# =============================================================================
+
+# =============================================================================
+# LARGE MODEL FILES — never commit (use HuggingFace / S3 / cloud storage)
+# =============================================================================
+*.pte                        # ExecuTorch compiled model files (~950MB–15GB)
+*.bin                        # Raw binary weights (PyTorch, GGUF, etc.)
+*.gguf                       # GGML/llama.cpp quantized models
+*.ggml                       # GGML model files
+*.safetensors                # HuggingFace safetensors format
+*.onnx                       # ONNX model files
+*.tflite                     # TensorFlow Lite models
+*.mlmodel                    # Core ML models
+*.mlpackage                  # Core ML packages
+*.pt                         # PyTorch checkpoint files
+*.pth                        # PyTorch model weights
+tokenizer.model              # SentencePiece tokenizer (can be large)
+tokenizer.json               # HuggingFace tokenizer (commit only if tiny)
+vocab.json                   # Vocabulary files
+
+# =============================================================================
+# ANDROID BUILD OUTPUTS
+# =============================================================================
+*.apk
+*.aab                        # Android App Bundle
+*.ap_
+*.dex
+app/build/
+build/
+out/
+
+# =============================================================================
+# GRADLE
+# =============================================================================
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar          # DO commit the wrapper jar
+!gradle-wrapper.properties   # DO commit wrapper properties
+.gradletasknamecache
+gradle.properties.bak
+
+# =============================================================================
+# LOCAL CONFIGURATION — machine-specific, never commit
+# =============================================================================
+local.properties             # Contains sdk.dir path (differs per machine)
+keystore.properties          # Signing keystore credentials
+*.keystore                   # Release signing keystores
+*.jks                        # Java keystore files
+signing.properties
+
+# =============================================================================
+# ANDROID STUDIO / INTELLIJ IDE
+# =============================================================================
+*.iml
+.idea/
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
+.idea/caches
+.idea/modules.xml
+.idea/navEditor.xml
+.idea/deploymentTargetDropDown.xml
+captures/
+.externalNativeBuild/
+.cxx/                        # CMake / NDK build cache
+
+# =============================================================================
+# EXECUTORCH SPECIFIC
+# =============================================================================
+# Build artifacts from ExecuTorch Python export scripts
+et-build/
+executorch-build/
+cmake-out/
+*.pte.sha256                 # Checksum files generated alongside .pte
+*.aar.bak                    # Backup AAR files
+
+# Downloaded AARs — pulled automatically by Gradle from Maven Central
+app/libs/*.aar
+app/libs/*.jar
+
+# ExecuTorch Python export environment
+export_env/
+.export_cache/
+
+# =============================================================================
+# PYTHON (model export scripts)
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+htmlcov/
+.pytest_cache/
+*.egg-info/
+dist/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg
+.installed.cfg
+instance/
+.webassets-cache
+
+# =============================================================================
+# macOS
+# =============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.AppleDouble
+.LSOverride
+Icon?
+.DocumentRevisions-V100
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# =============================================================================
+# DOWNLOADED MODEL CACHE (on-device path mirrored locally for testing)
+# =============================================================================
+app/src/main/assets/*.pte
+app/src/main/assets/*.bin
+app/src/main/assets/*.gguf
+app/src/main/assets/*.safetensors
+models/
+model_cache/
+downloaded_models/
+
+# =============================================================================
+# SECRETS & CREDENTIALS — CRITICAL: never commit API keys
+# =============================================================================
+secrets.properties
+hf_token.txt                 # HuggingFace access token
+*.token
+api_keys.xml
+google-services.json         # Firebase config (contains project keys)
+                             # Note: some teams DO commit google-services.json —
+                             # exclude only if it contains sensitive service keys
+
+# =============================================================================
+# LOGS & CRASH REPORTS
+# =============================================================================
+*.log
+crash_logs/
+logcat_*.txt
+heap_dump_*.hprof            # Android heap dumps (can be very large)
+*.hprof
+
+# =============================================================================
+# TEST OUTPUTS
+# =============================================================================
+test-results/
+lint-results/
+lint-results.xml
+lint-results-debug.html
+app/lint-results*
+
+# =============================================================================
+# GENERATED FILES — recreated by build, no need to track
+# =============================================================================
+app/src/main/java/com/**/BuildConfig.java
+app/src/main/java/com/**/R.java
+generated/

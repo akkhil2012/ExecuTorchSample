@@ -1,0 +1,37 @@
+
+ExecuTorch Export Report
+════════════════════════════════════════════════
+Model           : Phi-3 Mini 4K Instruct
+Quantization    : 8da4w (INT8 activations + INT4 weights, groupsize=32)
+Quant method    : Int8DynActInt4WeightQuantizer(groupsize=32)
+Backend         : XNNPACK (Android CPU / ARM NEON)
+Max seq length  : 512 tokens
+
+Stack
+─────
+  torch      : 2.11.0
+  torchao    : 0.17.0
+  executorch : 1.2.0
+
+Output files
+────────────
+  .pte      : ./android_assets/phi3_mini_8da4w.pte  (2186.0 MB)
+  tokenizer : ./android_assets/tokenizer.json
+
+Timing
+──────
+  Model load    : 53.7s
+  Quantization  : 40.8s
+  torch.export  : 64.7s
+  XNNPACK lower : 201.4s
+  Serialization : 10.2s
+  Total         : 371.6s (6.2 min)
+
+Next steps
+──────────
+  cp ./android_assets/phi3_mini_8da4w.pte \
+     ~/AndroidStudioProjects/EdgeApp/app/src/main/assets/phi3_mini.pte
+
+  cp ./android_assets/tokenizer.json \
+     ~/AndroidStudioProjects/EdgeApp/app/src/main/assets/tokenizer.json
+════════════════════════════════════════════════
