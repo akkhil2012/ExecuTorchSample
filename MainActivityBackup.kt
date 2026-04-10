@@ -46,7 +46,7 @@ class MainActivity : AppCompatActivity() {
         private const val MODEL_FILENAME  = "phi3_mini_8da4w.pte"
         private const val TOKENIZER_FILE  = "tokenizer.bin"
         private const val MODEL_URL       = "$HF_BASE_URL/$MODEL_FILENAME"
-        private const val TOKENIZER_URL   = "$HF_BASE_URL/tokenizer.bin"
+        private const val TOKENIZER_URL   = "$HF_BASE_URL/$TOKENIZER_FILE"
 
         private const val HF_TOKEN = "";
 
@@ -136,27 +136,174 @@ class MainActivity : AppCompatActivity() {
         messageInput.hint      = if (enabled) "Ask me anything..." else "Loading model..."
     }
 
+    private fun downloadTokenizerWithOkHttp(onComplete: (Boolean) -> Unit) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+
+                val request = okhttp3.Request.Builder()
+                    .url(TOKENIZER_URL)
+                    .build()
+
+                Log.d(TAG, "Downloading tokenizer via OkHttp from $TOKENIZER_URL")
+                val response = client.newCall(request).execute()
+                Log.d(TAG, "Response code: ${response.code}")
+                Log.d(TAG, "Content-Length header: ${response.header("Content-Length")}")
+                Log.d(TAG, "Content-Type: ${response.header("Content-Type")}")
+
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "Tokenizer download failed: ${response.code}")
+                    withContext(Dispatchers.Main) { onComplete(false) }
+                    return@launch
+                }
+
+                val destFile = getModelFile(TOKENIZER_FILE)
+                response.body?.byteStream()?.use { input ->
+                    destFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                Log.d(TAG, "Tokenizer downloaded: ${destFile.length()} bytes")
+                withContext(Dispatchers.Main) {
+                    onComplete(destFile.length() > 480_000L)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Tokenizer download error", e)
+                withContext(Dispatchers.Main) { onComplete(false) }
+            }
+        }
+    }
+
+
+    private fun isValidTokenizerBin(file: File): Boolean {
+        if (!file.exists()) {
+            Log.w(TAG, "Tokenizer file does not exist: ${file.absolutePath}")
+            return false
+        }
+
+        // Size check — tokenizer.json is ~433KB, real tokenizer.bin is 500KB+
+        if (file.length() < 480_000L) {
+            Log.w(TAG, "❌ Tokenizer too small: ${file.length()} bytes — likely tokenizer.json renamed to tokenizer.bin")
+            return false
+        }
+
+        // Magic bytes check — SentencePiece binary starts with 0x0A (protobuf field tag)
+        // tokenizer.json starts with '{' (0x7B) — completely different
+        try {
+            val header = ByteArray(4)
+            file.inputStream().use { it.read(header) }
+
+            val firstByte = header[0].toInt() and 0xFF
+            Log.d(TAG, "Tokenizer first byte: 0x${firstByte.toString(16).uppercase()} | size: ${file.length()} bytes")
+
+            // JSON files start with '{' = 0x7B
+            if (firstByte == 0x7B) {
+                Log.e(TAG, "❌ TOKENIZER IS JSON — first byte is '{' (0x7B). This is tokenizer.json not tokenizer.bin!")
+                return false
+            }
+
+            // SentencePiece protobuf starts with 0x0A
+            if (firstByte != 0x0A) {
+                Log.w(TAG, "⚠️ Unexpected first byte 0x${firstByte.toString(16).uppercase()} — may not be valid SentencePiece binary")
+                // Still allow it — some valid tokenizer.bin variants start differently
+            }
+
+            Log.d(TAG, "✅ Tokenizer looks valid: size=${file.length()}, firstByte=0x${firstByte.toString(16).uppercase()}")
+            return true
+
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to read tokenizer header: ${e.message}")
+            return false
+        }
+    }
+
+
     private fun initModelFiles() {
         val modelFile     = getModelFile(MODEL_FILENAME)
         val tokenizerFile = getModelFile(TOKENIZER_FILE)
 
-        Log.d(TAG, "Checking model files: ${modelFile.absolutePath}")
+        Log.d(TAG, "=== FILE CHECK ===")
+        Log.d(TAG, "Model path: ${modelFile.absolutePath}")
+        Log.d(TAG, "Model exists: ${modelFile.exists()}, size: ${modelFile.length()} bytes")
+        Log.d(TAG, "Tokenizer path: ${tokenizerFile.absolutePath}")
+        Log.d(TAG, "Tokenizer exists: ${tokenizerFile.exists()}, size: ${tokenizerFile.length()} bytes")
 
-        if (modelFile.exists() && modelFile.length() > 0 &&
-            tokenizerFile.exists() && tokenizerFile.length() > 0) {
-            Log.d(TAG, "Files found. Model size: ${modelFile.length()}, Tokenizer size: ${tokenizerFile.length()}")
-            statusText.text = "✅ Model files found"
-            loadModelAsync(modelFile.absolutePath, tokenizerFile.absolutePath)
-        } else {
-            Log.d(TAG, "Files NOT found or incomplete. Starting download.")
+        if (tokenizerFile.exists() && !isValidTokenizerBin(tokenizerFile)) {
+            Log.e(TAG, "❌ Wrong tokenizer detected — deleting and re-downloading")
+            tokenizerFile.delete()
             chatAdapter.addMessage(
-                ChatMessage("📥 Model files missing. Downloading (~2.2GB)…", isUser = false)
+                ChatMessage(
+                    "❌ Wrong tokenizer file detected (tokenizer.json renamed as tokenizer.bin). " +
+                            "Deleting and downloading correct SentencePiece tokenizer.bin…",
+                    isUser = false
+                )
             )
-            startDownloads()
+        }
+
+
+        val modelOk     = modelFile.exists() && modelFile.length() > 1_000_000_000L
+        val tokenizerOk = tokenizerFile.exists() && tokenizerFile.length() > 400_000L
+
+        Log.d(TAG, "modelOk=$modelOk, tokenizerOk=$tokenizerOk")
+
+        when {
+            // ── Both files ready → load immediately, skip all downloads ──────────
+            modelOk && tokenizerOk -> {
+                Log.d(TAG, "✅ Both files already present — skipping download")
+                statusText.text = "✅ Model files found"
+                chatAdapter.addMessage(
+                    ChatMessage("✅ Model already downloaded. Loading…", isUser = false)
+                )
+                loadModelAsync(modelFile.absolutePath, tokenizerFile.absolutePath)
+            }
+
+            // ── Model present but tokenizer missing/corrupt → only download tokenizer
+            modelOk && !tokenizerOk -> {
+                Log.w(TAG, "⚠️ Model OK but tokenizer missing/corrupt (${tokenizerFile.length()} bytes) — downloading tokenizer only")
+                if (tokenizerFile.exists()) tokenizerFile.delete()
+                chatAdapter.addMessage(
+                    ChatMessage("📥 Model found. Downloading tokenizer only…", isUser = false)
+                )
+                downloadTokenizerOnly(modelFile)
+            }
+
+            // ── Model missing → download everything ──────────────────────────────
+            else -> {
+                Log.d(TAG, "📥 Model missing — starting full download")
+                if (!tokenizerOk && tokenizerFile.exists()) tokenizerFile.delete()
+                chatAdapter.addMessage(
+                    ChatMessage("📥 Downloading model (~2.2 GB) and tokenizer…", isUser = false)
+                )
+                startDownloads()
+            }
         }
     }
 
-    @SuppressLint("UnspecifiedRegisterReceiverFlag")
+
+    private fun downloadTokenizerOnly(modelFile: File) {
+        statusText.text = "📥 Downloading tokenizer…"
+        downloadTokenizerWithOkHttp { success ->
+            if (success) {
+                Log.d(TAG, "✅ Tokenizer downloaded successfully")
+                chatAdapter.addMessage(
+                    ChatMessage("✅ Tokenizer ready. Loading model…", isUser = false)
+                )
+                loadModelAsync(modelFile.absolutePath, getModelFile(TOKENIZER_FILE).absolutePath)
+            } else {
+                Log.e(TAG, "❌ Tokenizer download failed")
+                statusText.text = "❌ Tokenizer download failed"
+                chatAdapter.addMessage(
+                    ChatMessage("❌ Tokenizer download failed. Check your internet connection and restart.", isUser = false)
+                )
+            }
+        }
+    }
+
+
     private fun startDownloads() {
         downloadManager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
 
@@ -171,27 +318,55 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(downloadReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(downloadReceiver, filter)
         }
 
-        tokenizerDownloadId = enqueueDownload(TOKENIZER_URL, TOKENIZER_FILE, "Phi-3 Tokenizer")
-        modelDownloadId = enqueueDownload(MODEL_URL, MODEL_FILENAME, "Phi-3 Model")
+        // Download tokenizer first via OkHttp
+        chatAdapter.addMessage(ChatMessage("📥 Downloading tokenizer…", isUser = false))
+        downloadTokenizerWithOkHttp { success ->
+            Log.d(TAG, "Tokenizer OkHttp download success=$success")
+            chatAdapter.addMessage(
+                ChatMessage(
+                    if (success) "✅ Tokenizer ready" else "❌ Tokenizer download failed",
+                    isUser = false
+                )
+            )
+        }
 
+        // Download model via DownloadManager
+        modelDownloadId = enqueueDownload(MODEL_URL, MODEL_FILENAME, "Phi-3 Model")
         pollDownloadProgress()
     }
 
+
     private fun enqueueDownload(url: String, fileName: String, title: String): Long {
         val destFile = getModelFile(fileName)
+
+        // Delete any existing partial/corrupt file first
+        if (destFile.exists()) {
+            Log.d(TAG, "Deleting existing file: ${destFile.name} (${destFile.length()} bytes)")
+            destFile.delete()
+        }
+
         val request = DownloadManager.Request(Uri.parse(url)).apply {
             setTitle(title)
+            setDescription("Downloading $fileName")
             setDestinationUri(Uri.fromFile(destFile))
             setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI or DownloadManager.Request.NETWORK_MOBILE)
+            setAllowedNetworkTypes(
+                DownloadManager.Request.NETWORK_WIFI or
+                        DownloadManager.Request.NETWORK_MOBILE
+            )
+            // Allow roaming
+            setAllowedOverRoaming(true)
             if (HF_TOKEN.isNotEmpty()) {
                 addRequestHeader("Authorization", "Bearer $HF_TOKEN")
             }
         }
-        return downloadManager!!.enqueue(request)
+        val id = downloadManager!!.enqueue(request)
+        Log.d(TAG, "Enqueued download: $fileName, id=$id, dest=${destFile.absolutePath}")
+        return id
     }
 
     private fun pollDownloadProgress() {
@@ -225,18 +400,120 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onDownloadComplete(id: Long) {
-        val modelFile = getModelFile(MODEL_FILENAME)
+        val modelFile     = getModelFile(MODEL_FILENAME)
         val tokenizerFile = getModelFile(TOKENIZER_FILE)
-        if (modelFile.exists() && modelFile.length() > 1000000000 && // Roughly check for > 1GB
-            tokenizerFile.exists() && tokenizerFile.length() > 500000) {
-            runOnUiThread {
-                chatAdapter.addMessage(ChatMessage("✅ Download complete! Loading model…", isUser = false))
-                loadModelAsync(modelFile.absolutePath, tokenizerFile.absolutePath)
+
+        Log.d(TAG, "Download complete broadcast: id=$id, modelDownloadId=$modelDownloadId")
+        Log.d(TAG, "Model size: ${modelFile.length()}, Tokenizer size: ${tokenizerFile.length()}")
+
+        if (id != modelDownloadId) {
+            Log.d(TAG, "Ignoring unrelated download id=$id")
+            return
+        }
+
+        val modelOk     = modelFile.exists() && modelFile.length() > 1_000_000_000L
+        val tokenizerOk = tokenizerFile.exists() && tokenizerFile.length() > 400_000L
+
+        when {
+            modelOk && tokenizerOk -> {
+                Log.d(TAG, "✅ Both files ready after download — loading model")
+                runOnUiThread {
+                    chatAdapter.addMessage(
+                        ChatMessage("✅ Download complete! Loading model…", isUser = false)
+                    )
+                    loadModelAsync(modelFile.absolutePath, tokenizerFile.absolutePath)
+                }
+            }
+
+            modelOk && !tokenizerOk -> {
+                // Model downloaded but tokenizer OkHttp may still be in progress
+                Log.w(TAG, "⚠️ Model downloaded but tokenizer not ready yet (${tokenizerFile.length()} bytes) — waiting")
+                runOnUiThread {
+                    chatAdapter.addMessage(
+                        ChatMessage("⏳ Model downloaded. Waiting for tokenizer…", isUser = false)
+                    )
+                }
+                // Poll until tokenizer arrives (OkHttp may still be writing it)
+                waitForTokenizerThenLoad(modelFile)
+            }
+
+            else -> {
+                Log.e(TAG, "❌ Model download incomplete: size=${modelFile.length()}")
+                runOnUiThread {
+                    chatAdapter.addMessage(
+                        ChatMessage("❌ Model download incomplete. Please restart.", isUser = false)
+                    )
+                }
             }
         }
     }
 
+    private fun waitForTokenizerThenLoad(modelFile: File) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val tokenizerFile = getModelFile(TOKENIZER_FILE)
+            var waited = 0
+            val maxWaitSeconds = 60
+
+            while (waited < maxWaitSeconds) {
+                if (tokenizerFile.exists() && tokenizerFile.length() > 400_000L) {
+                    Log.d(TAG, "✅ Tokenizer ready after ${waited}s wait")
+                    withContext(Dispatchers.Main) {
+                        chatAdapter.addMessage(
+                            ChatMessage("✅ All files ready. Loading model…", isUser = false)
+                        )
+                        loadModelAsync(modelFile.absolutePath, tokenizerFile.absolutePath)
+                    }
+                    return@launch
+                }
+                delay(1000)
+                waited++
+                Log.d(TAG, "Waiting for tokenizer… ${waited}s (size=${tokenizerFile.length()})")
+            }
+
+            // Timed out — try downloading tokenizer again
+            Log.e(TAG, "❌ Tokenizer not ready after ${maxWaitSeconds}s — re-downloading")
+            withContext(Dispatchers.Main) {
+                chatAdapter.addMessage(
+                    ChatMessage("⏳ Re-trying tokenizer download…", isUser = false)
+                )
+                downloadTokenizerOnly(modelFile)
+            }
+        }
+    }
+
+
     private fun loadModelAsync(modelPath: String, tokenizerPath: String) {
+        statusText.text = "⏳ Loading Phi-3 Mini…"
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                Log.d(TAG, "Initializing LlamaModule...")
+                llamaModule = LlamaModule(3,modelPath, tokenizerPath, TEMPERATURE)
+
+                // ❌ DELETE THIS ENTIRE BLOCK — this is breaking your model
+                // llamaModule?.generate("Hi", 5, object : LlamaCallback {
+                //     override fun onResult(token: String?) { ... }
+                //     override fun onStats(tps: Float) { ... }
+                // })
+
+                withContext(Dispatchers.Main) {
+                    isModelLoaded = true
+                    conversationHistory.clear()
+                    statusText.text = "✅ Phi-3 Mini ready"
+                    setInputEnabled(true)
+                    chatAdapter.addMessage(
+                        ChatMessage("Model loaded! Ask me anything.", isUser = false)
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Load error", e)
+                withContext(Dispatchers.Main) {
+                    statusText.text = "❌ Load failed: ${e.message}"
+                    chatAdapter.addMessage(ChatMessage("⚠️ ${e.message}", isUser = false))
+                }
+            }
+        }
+    }
+    /*private fun loadModelAsync(modelPath: String, tokenizerPath: String) {
         statusText.text = "⏳ Loading Phi-3 Mini…"
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -248,9 +525,11 @@ class MainActivity : AppCompatActivity() {
                 llamaModule?.generate("Hi", 5, object : LlamaCallback {
                     override fun onResult(token: String?) {
                         Log.d(TAG, "Warm-up token: '$token'")
+                       // Log.d(TAG, "RAW TOKEN: '${token}' | accumulated: ${token.length} chars")
                     }
                     override fun onStats(tps: Float) {
                         Log.d(TAG, "Warm-up tps: $tps")
+                       // Log.d(TAG, "RAW TOKEN: '${token}' | accumulated: ${generatedTokens.length} chars")
                     }
                 })
 
@@ -268,7 +547,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-    }
+    }*/
 
     private fun sendMessage() {
         val userText = messageInput.text.toString().trim()
@@ -283,6 +562,12 @@ class MainActivity : AppCompatActivity() {
         chatAdapter.addMessage(ChatMessage("", isUser = false, isStreaming = true))
 
         val prompt = buildPhi3Prompt(userText)
+        Log.d(TAG, "════════════════════════════════════")
+        Log.d(TAG, "USER INPUT: '$userText'")
+        Log.d(TAG, "FULL PROMPT SENT TO MODEL:")
+        Log.d(TAG, prompt)
+        Log.d(TAG, "════════════════════════════════════")
+
         Log.d(TAG, "Starting generation with prompt:\n$prompt")
 
         val generatedTokens = StringBuilder()
@@ -292,8 +577,41 @@ class MainActivity : AppCompatActivity() {
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
+                var tokenCount = 0
+                var nullCount = 0
+                var emptyCount = 0
                 llamaModule?.generate(prompt, MAX_NEW_TOKENS, object : LlamaCallback {
                     override fun onResult(token: String?) {
+                        tokenCount++
+                        when {
+                            token == null -> {
+                                nullCount++
+                                Log.w(TAG, "⚠️ TOKEN #$tokenCount IS NULL")
+                            }
+                            token.isEmpty() -> {
+                                emptyCount++
+                                Log.w(TAG, "⚠️ TOKEN #$tokenCount IS EMPTY STRING")
+                            }
+                            else -> {
+                                Log.d(TAG, "✅ TOKEN #$tokenCount: '$token'")
+                                generatedTokens.append(token)
+                                lifecycleScope.launch(Dispatchers.Main) {
+                                    chatAdapter.updateLastMessage(generatedTokens.toString(), true)
+                                    scrollToBottom()
+                                }
+                            }
+                        }
+                    }
+
+                    override fun onStats(tps: Float) {
+                        Log.d(TAG, "STATS: tps=$tps | tokenCount=$tokenCount | nullCount=$nullCount | emptyCount=$emptyCount")
+                    }
+                })
+
+                /*llamaModule?.generate(prompt, MAX_NEW_TOKENS, object : LlamaCallback {
+                    override fun onResult(token: String?) {
+                        Log.d(TAG, "RAW TOKEN: '${token}' | accumulated: ${generatedTokens.length} chars")
+
                         Log.d(TAG, "Received token: '$token'")
                         token?.let {
                             generatedTokens.append(it)
@@ -310,11 +628,23 @@ class MainActivity : AppCompatActivity() {
                             statusText.text = "⚡ %.1f tok/s".format(tps)
                         }
                     }
-                })
+                })*/
 
                 withContext(Dispatchers.Main) {
                     val final = generatedTokens.toString()
-                    Log.d(TAG, "Generation complete. Final text: '$final'")
+                    Log.d(TAG, "════════════════════════════════════")
+                    Log.d(TAG, "GENERATION DONE")
+                    Log.d(TAG, "tokenCount  = $tokenCount")
+                    Log.d(TAG, "nullCount   = $nullCount")
+                    Log.d(TAG, "emptyCount  = $emptyCount")
+                    Log.d(TAG, "final length= ${final.length}")
+                    Log.d(TAG, "final text  = '$final'")
+                    Log.d(TAG, "Tokenizer size: ${getModelFile(TOKENIZER_FILE).length()} bytes")
+
+                    Log.d(TAG, "════════════════════════════════════")
+
+                    //val final = "talk to tarla dalal"
+                    Log.d(TAG, "Generation complete. Final text------>: '$final'")
                     chatAdapter.updateLastMessage(final, false)
                     conversationHistory.append("<|user|>\n$userText<|end|>\n<|assistant|>\n$final<|end|>\n")
                     isGenerating = false
