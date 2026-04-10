@@ -44,11 +44,13 @@ class MainActivity : AppCompatActivity() {
         private const val HF_BASE_URL     =
             "https://huggingface.co/akhilsalogra/phi3-mobile-model/resolve/main"
         private const val MODEL_FILENAME  = "phi3_mini_8da4w.pte"
-        private const val TOKENIZER_FILE  = "tokenizer.json"
+        private const val TOKENIZER_FILE  = "tokenizer.bin"
         private const val MODEL_URL       = "$HF_BASE_URL/$MODEL_FILENAME"
-        private const val TOKENIZER_URL   = "$HF_BASE_URL/$TOKENIZER_FILE"
+        private const val TOKENIZER_URL   = "$HF_BASE_URL/tokenizer.bin"
 
-        
+        private const val HF_TOKEN = "";
+
+
     }
 
     // ── UI ────────────────────────────────────────────────────────────────────
@@ -139,7 +141,7 @@ class MainActivity : AppCompatActivity() {
         val tokenizerFile = getModelFile(TOKENIZER_FILE)
 
         Log.d(TAG, "Checking model files: ${modelFile.absolutePath}")
-        
+
         if (modelFile.exists() && modelFile.length() > 0 &&
             tokenizerFile.exists() && tokenizerFile.length() > 0) {
             Log.d(TAG, "Files found. Model size: ${modelFile.length()}, Tokenizer size: ${tokenizerFile.length()}")
@@ -226,7 +228,7 @@ class MainActivity : AppCompatActivity() {
         val modelFile = getModelFile(MODEL_FILENAME)
         val tokenizerFile = getModelFile(TOKENIZER_FILE)
         if (modelFile.exists() && modelFile.length() > 1000000000 && // Roughly check for > 1GB
-            tokenizerFile.exists() && tokenizerFile.length() > 0) {
+            tokenizerFile.exists() && tokenizerFile.length() > 500000) {
             runOnUiThread {
                 chatAdapter.addMessage(ChatMessage("✅ Download complete! Loading model…", isUser = false))
                 loadModelAsync(modelFile.absolutePath, tokenizerFile.absolutePath)
@@ -240,7 +242,8 @@ class MainActivity : AppCompatActivity() {
             try {
                 Log.d(TAG, "Initializing LlamaModule...")
                 llamaModule = LlamaModule(modelPath, tokenizerPath, TEMPERATURE)
-                
+
+
                 Log.d(TAG, "Running warm-up generation...")
                 llamaModule?.generate("Hi", 5, object : LlamaCallback {
                     override fun onResult(token: String?) {
@@ -281,7 +284,7 @@ class MainActivity : AppCompatActivity() {
 
         val prompt = buildPhi3Prompt(userText)
         Log.d(TAG, "Starting generation with prompt:\n$prompt")
-        
+
         val generatedTokens = StringBuilder()
         isGenerating = true
         sendButton.isEnabled = false
